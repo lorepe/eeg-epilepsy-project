@@ -5,9 +5,9 @@ Repositorio oficial para el proyecto de procesamiento de bioseñales enfocado en
 ---
 
 ## 👥 Equipo de Trabajo
-* **Valentina Fonseca** (Código: 127406)
-* **Laura Olachica** (Código: 122649)
-* **Lorena Perez** (Código: 127454)
+* **Valentina Fonseca** 
+* **Laura Olachica** 
+* **Lorena Perez** 
 
 ---
 
