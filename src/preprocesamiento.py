@@ -1,7 +1,9 @@
+import numpy as np
 from scipy.signal import butter, filtfilt, iirnotch
 from scipy.stats import zscore
 
 def pipeline_preprocesamiento(senal, fs=173.61):
+    """Aplica filtros Notch y Butterworth, y normaliza con Z-score."""
     # 1. Filtro Notch (50 Hz)
     b_n, a_n = iirnotch(50.0, 30.0, fs)
     senal_limpia = filtfilt(b_n, a_n, senal)
@@ -13,3 +15,22 @@ def pipeline_preprocesamiento(senal, fs=173.61):
 
     # 3. Normalización Z-score
     return zscore(senal_limpia)
+
+
+def segmentar_senal(senal, fs=173.61, duracion_ventana=4.0, solapamiento=0.50):
+    """
+    Divide una señal 1D en ventanas superpuestas.
+    Por defecto: ventanas de 4 segundos con 50% de solapamiento.
+    """
+    muestras_ventana = int(duracion_ventana * fs)
+    paso = int(muestras_ventana * (1 - solapamiento))
+    
+    segmentos = []
+    inicio = 0
+    
+    while inicio + muestras_ventana <= len(senal):
+        segmento = senal[inicio:inicio + muestras_ventana]
+        segmentos.append(segmento)
+        inicio += paso
+        
+    return np.array(segmentos)
