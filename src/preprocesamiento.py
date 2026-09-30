@@ -34,3 +34,10 @@ def segmentar_senal(senal, fs=173.61, duracion_ventana=4.0, solapamiento=0.50):
         inicio += paso
         
     return np.array(segmentos)
+def filtrar_senal(senal, fs=173.61):
+    """Igual que pipeline_preprocesamiento pero SIN z-score (conserva la amplitud)."""
+    b_n, a_n = iirnotch(50.0, 30.0, fs)
+    senal_filtrada = filtfilt(b_n, a_n, senal)
+    nyq = 0.5 * fs
+    b_b, a_b = butter(4, [0.5/nyq, 60.0/nyq], btype='band')
+    return filtfilt(b_b, a_b, senal_filtrada)
