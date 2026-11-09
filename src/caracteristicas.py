@@ -1,3 +1,4 @@
+from scipy import stats as _stats
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import welch, stft
@@ -123,7 +124,6 @@ def plot_tiempo_frecuencia(senal, fs=FS, titulo_extra=""):
     plt.tight_layout()
     plt.show()
 
-from scipy import stats as _stats
 
 
 def _entropia_normalizada(p):
@@ -201,7 +201,9 @@ def features_tiempo_frecuencia(x, fs=FS, wavelet="db4", nivel=5):
 
 
 def extraer_features(x, fs=FS):
-    return {**features_estadisticas(x), **features_espectrales(x, fs), **features_tiempo_frecuencia(x, fs)}
+    return {**features_estadisticas(x), 
+            **features_espectrales(x, fs), 
+            **features_tiempo_frecuencia(x, fs)}
 
 
 def matriz_features(senales, fs=FS):
@@ -210,6 +212,7 @@ def matriz_features(senales, fs=FS):
 
 
 def conjuntos_de_features(columnas):
+    
     est = [c for c in columnas if c.startswith("est_")]
     esp = [c for c in columnas if c.startswith("psd_")]
     tf = [c for c in columnas if c.startswith("wav_") or c.startswith("stft_")]
@@ -219,3 +222,57 @@ def conjuntos_de_features(columnas):
         "C_tiempo_frecuencia": est + tf,          # STFT/wavelets
         "D_todo": est + esp + tf,
     }
+    
+    
+    
+def comparar_espectros(sano, ictal, fs=FS, nombre_a='Sano (Z)', nombre_b='Crisis (S)'):
+    """FFT y PSD de las dos señales en los MISMOS ejes (para que la diferencia de amplitud sea visible)."""
+    fig, axes = plt.subplots(1, 3, figsize=(17, 4.5))
+    for x, n, c in [(sano, nombre_a, 'tab:blue'), (ictal, nombre_b, 'tab:red')]:
+        f = np.fft.rfftfreq(len(x), 1/fs); mag = np.abs(np.fft.rfft(x))
+        fp, p = welch(x, fs=fs, nperseg=1024)
+        axes[0].plot(f, mag, color=c, lw=0.8, alpha=0.85, label=n)
+        axes[1].semilogy(fp, p, color=c, lw=1.5, label=n)
+        tot = p[(fp >= 0.5) & (fp <= 40)].sum()
+        rel = [p[(fp >= lo) & (fp < hi)].sum() / tot for lo, hi in BANDAS.values()]
+        axes[2].bar(np.arange(len(rel)) + (0.2 if c == 'tab:red' else -0.2), rel, width=0.4, color=c, label=n)
+    m40 = lambda x_: welch(x_, fs=fs, nperseg=1024)
+    pv = np.concatenate([m40(x)[1][m40(x)[0] <= 40] for x in (sano, ictal)])
+    axes[1].set_ylim(pv.min()*0.5, pv.max()*2)
+    axes[0].set_title('FFT (misma escala)'); axes[0].set_ylabel('Magnitud'); axes[0].set_xlim(0, 40)
+    axes[1].set_title('PSD de Welch (misma escala)'); axes[1].set_ylabel('Potencia/Hz (µV²/Hz)'); axes[1].set_xlim(0, 40)
+    axes[2].set_title('Potencia relativa por banda'); axes[2].set_xticks(range(len(BANDAS))); axes[2].set_xticklabels(BANDAS.keys())
+    axes[2].set_ylabel('Fracción de la potencia')
+    for ax in axes[:2]:
+        ax.set_xlabel('Frecuencia (Hz)'); ax.grid(True, alpha=0.3)
+    for ax in axes: ax.legend()
+    plt.tight_layout(); return fig
+
+
+def comparar_tiempo_frecuencia(sano, ictal, fs=FS, nombre_a='Sano (Z)', nombre_b='Crisis (S)'):
+    """STFT y wavelet de las dos señales con la MISMA escala de color (en dB)."""
+    sig = {nombre_a: sano, nombre_b: ictal}
+    frecs = np.linspace(1, 40, 120)                          # rejilla de frecuencias uniforme
+    escalas = pywt.central_frequency('morl') * fs / frecs
+    res = {}
+    for n, x in sig.items():
+        f, t, Z = stft(x, fs=fs, nperseg=256, noverlap=128)
+        S = 10*np.log10(np.abs(Z[:, 1:-1])**2 + 1e-12)       # quita 1ª y última columna (relleno de ceros)
+        c, fw = pywt.cwt(x, escalas, 'morl', sampling_period=1/fs)
+        W = 20*np.log10(np.abs(c) + 1e-12)
+        res[n] = (f, t[1:-1], S, fw, W, np.arange(len(x))/fs)
+    pct = lambda arrs, q: np.percentile(np.concatenate([a.ravel() for a in arrs]), q)
+    Sv = [v[2][(v[0] >= 0.5) & (v[0] <= 40)] for v in res.values()]
+    vs = (pct(Sv, 1), pct(Sv, 99.5))                         # misma escala de color para las dos señales
+    vw = (pct([v[4] for v in res.values()], 1), pct([v[4] for v in res.values()], 99.5))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 8), sharex=True, constrained_layout=True)
+    for j, (n, (f, t, S, fw, W, tt)) in enumerate(res.items()):
+        im1 = axes[0, j].pcolormesh(t, f, S, shading='auto', cmap='viridis', vmin=vs[0], vmax=vs[1])
+        axes[0, j].set_ylim(0.5, 40); axes[0, j].set_title(f'STFT · {n}')
+        o = np.argsort(fw)
+        im2 = axes[1, j].imshow(W[o], extent=[tt[0], tt[-1], fw[o][0], fw[o][-1]], aspect='auto', origin='lower',
+                                cmap='magma', vmin=vw[0], vmax=vw[1], interpolation='antialiased')
+        axes[1, j].set_ylim(1, 40); axes[1, j].set_title(f'Wavelet Morlet · {n}'); axes[1, j].set_xlabel('Tiempo (s)')
+    axes[0, 0].set_ylabel('Frecuencia (Hz)'); axes[1, 0].set_ylabel('Frecuencia (Hz)')
+    fig.colorbar(im1, ax=axes[0, :], label='Potencia (dB)'); fig.colorbar(im2, ax=axes[1, :], label='Magnitud (dB)')
+    return fig
