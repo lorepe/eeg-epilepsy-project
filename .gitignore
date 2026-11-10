@@ -1,6 +1,8 @@
-# Ignorar carpetas de datos
-data/
-# Ignorar entornos virtuales y archivos temporales de Python
+# Datos: el dataset de Bonn se descarga aparte y los .pkl son pesados
+data/raw/
+data/processed/*.pkl
+
+# Entornos y archivos temporales de Python
 venv/
 .env
 __pycache__/
